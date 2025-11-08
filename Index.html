@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Finde Schulferien und Feiertage in deutschen Bundesländern">
+    <meta name="theme-color" content="#4f46e5">
+    <title>Ferien & Feiertage Finder</title>
+
+```
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%234f46e5'/%3E%3Cpath d='M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V9h14v10z' fill='white'/%3E%3C/svg%3E">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<style>
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    .animate-spin {
+        animation: spin 1s linear infinite;
+    }
+</style>
+```
+
+</head>
+<body>
+    <div id="root"></div>
+
+```
+<script>
+    const { useState } = React;
+
+    function App() {
+        const [startDate, setStartDate] = useState('');
+        const [endDate, setEndDate] = useState('');
+        const [highlightedStates, setHighlightedStates] = useState(new Set());
+        const [results, setResults] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState(null);
+
+        const stateMapping = {
+            'Baden-Württemberg': 'BW',
+            'Bayern': 'BY',
+            'Berlin': 'BE',
+            'Brandenburg': 'BB',
+            'Bremen': 'HB',
+            'Hamburg': 'HH',
+            'Hessen': 'HE',
+            'Mecklenburg-Vorpommern': 'MV',
+            'Niedersachsen': 'NI',
+            'Nordrhein-Westfalen': 'NW',
+            'Rheinland-Pfalz': 'RP',
+            'Saarland': 'SL',
+            'Sachsen': 'SN',
+            'Sachsen-Anhalt': 'ST',
+            'Schleswig-Holstein': 'SH',
+            'Thüringen': 'TH'
+        };
+
+        const checkDateRange = async () => {
+            if (!startDate || !endDate) {
+                alert('Bitte beide Daten eingeben');
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+            setResults([]);
+            setHighlightedStates(new Set());
+
+            try {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                const affected = new Set();
+                const details = [];
+
+                const startYear = start.getFullYear();
+                const endYear = end.getFullYear();
+                const years = [];
+                for (let year = startYear; year <= endYear; year++) {
+                    years.push(year);
+                }
+
+                // Schulferien abrufen
+                for (const [stateName, stateCode] of Object.entries(stateMapping)) {
+                    for (const year of years) {
+                        try {
+                            const response = await fetch(
+                                `https://ferien-api.de/api/v1/holidays/${stateCode}/${year}`
+                            );
+                            
+                            if (response.ok) {
+                                const data = await response.json();
+                                
+                                data.forEach(ferien => {
+                                    const ferienStart = new Date(ferien.start);
+                                    const ferienEnd = new Date(ferien.end);
+                                    
+                                    if (start <= ferienEnd && end >= ferienStart) {
+                                        affected.add(stateName);
+                                        details.push({
+                                            state: stateName,
+                                            type: 'Schulferien',
+                                            name: ferien.name.charAt(0).toUpperCase() + ferien.name.slice(1),
+                                            start: ferien.start.split('T')[0],
+                                            end: ferien.end.split('T')[0]
+                                        });
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`Fehler beim Abrufen der Ferien für ${stateName}:`, err);
+                        }
+                    }
+                }
+
+                // Feiertage abrufen
+                for (const year of years) {
+                    try {
+                        const response = await fetch(
+                            `https://feiertage-api.de/api/?jahr=${year}`
+                        );
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            
+                            Object.entries(data).forEach(([name, info]) => {
+                                const feiertagDate = new Date(info.datum);
+                                
+                                if (feiertagDate >= start && feiertagDate <= end) {
+                                    Object.entries(stateMapping).forEach(([stateName, stateCode]) => {
+                                        const hinweis = info.hinweis || '';
+                                        const isNational = hinweis === '';
+                                        const isInState = hinweis.includes(stateCode) || isNational;
+                                        
+                                        if (isInState) {
+                                            affected.add(stateName);
+                                            details.push({
+                                                state: stateName,
+                                                type: 'Feiertag',
+                                                name: name,
+                                                date: info.datum
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        console.error(`Fehler beim Abrufen der Feiertage für ${year}:`, err);
+                    }
+                }
+
+                setHighlightedStates(affected);
+                setResults(details);
+            } catch (err) {
+                setError('Fehler beim Laden der Daten. Bitte versuchen Sie es später erneut.');
+                console.error('Fehler:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        return React.createElement('div', { className: 'min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8' },
+            React.createElement('div', { className: 'max-w-6xl mx-auto' },
+                React.createElement('div', { className: 'bg-white rounded-2xl shadow-2xl p-6 md:p-8' },
+                    // Header
+                    React.createElement('div', { className: 'flex items-center gap-3 mb-8' },
+                        React.createElement('svg', { className: 'w-10 h-10 text-indigo-600', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24', strokeWidth: '2' },
+                            React.createElement('rect', { x: '3', y: '4', width: '18', height: '18', rx: '2', ry: '2' }),
+                            React.createElement('line', { x1: '16', y1: '2', x2: '16', y2: '6' }),
+                            React.createElement('line', { x1: '8', y1: '2', x2: '8', y2: '6' }),
+                            React.createElement('line', { x1: '3', y1: '10', x2: '21', y2: '10' })
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('h1', { className: 'text-2xl md:text-3xl font-bold text-gray-800' }, 'Ferien & Feiertage Finder'),
+                            React.createElement('p', { className: 'text-xs md:text-sm text-gray-600 mt-1' }, 'Live-Daten von ferien-api.de und feiertage-api.de')
+                        )
+                    ),
+
+                    // Input Fields
+                    React.createElement('div', { className: 'grid md:grid-cols-3 gap-4 md:gap-6 mb-8' },
+                        React.createElement('div', null,
+                            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Startdatum'),
+                            React.createElement('input', {
+                                type: 'date',
+                                value: startDate,
+                                onChange: (e) => setStartDate(e.target.value),
+                                className: 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                            })
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Enddatum'),
+                            React.createElement('input', {
+                                type: 'date',
+                                value: endDate,
+                                onChange: (e) => setEndDate(e.target.value),
+                                className: 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                            })
+                        ),
+                        React.createElement('div', { className: 'flex items-end' },
+                            React.createElement('button', {
+                                onClick: checkDateRange,
+                                disabled: loading,
+                                className: 'w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-2 px-6 rounded-lg transition duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2'
+                            },
+                                loading ? 'Lädt...' : 'Suchen'
+                            )
+                        )
+                    ),
+
+                    // Error Message
+                    error && React.createElement('div', { className: 'mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm' },
+                        error
+                    ),
+
+                    // Highlighted States
+                    highlightedStates.size > 0 && React.createElement('div', { className: 'mb-8 p-6 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200' },
+                        React.createElement('h2', { className: 'text-xl font-semibold text-gray-800 mb-4' }, 
+                            `Betroffene Bundesländer (${highlightedStates.size})`
+                        ),
+                        React.createElement('div', { className: 'flex flex-wrap gap-2' },
+                            Array.from(highlightedStates).sort().map(state =>
+                                React.createElement('span', {
+                                    key: state,
+                                    className: 'px-4 py-2 bg-indigo-600 text-white rounded-full text-sm font-medium shadow-sm'
+                                }, state)
+                            )
+                        )
+                    ),
+
+                    // Results
+                    React.createElement('div', null,
+                        React.createElement('h2', { className: 'text-xl font-semibold text-gray-800 mb-4' },
+                            `Detaillierte Ergebnisse (${results.length})`
+                        ),
+                        React.createElement('div', { className: 'bg-gray-50 rounded-xl p-4 md:p-6 border border-gray-200 max-h-[600px] overflow-y-auto' },
+                            loading ? React.createElement('div', { className: 'flex items-center justify-center py-12' },
+                                React.createElement('div', { className: 'text-indigo-600' }, 'Lädt...')
+                            ) : results.length === 0 ? React.createElement('p', { className: 'text-gray-500 text-center py-12' },
+                                'Bitte Zeitraum auswählen und suchen'
+                            ) : React.createElement('div', { className: 'space-y-4' },
+                                Object.entries(
+                                    results.reduce((acc, item) => {
+                                        if (!acc[item.state]) acc[item.state] = [];
+                                        acc[item.state].push(item);
+                                        return acc;
+                                    }, {})
+                                )
+                                .sort((a, b) => a[0].localeCompare(b[0]))
+                                .map(([state, items]) =>
+                                    React.createElement('div', {
+                                        key: state,
+                                        className: 'bg-white rounded-lg p-5 shadow-md border border-gray-100'
+                                    },
+                                        React.createElement('h3', { className: 'font-bold text-lg text-indigo-600 mb-3 flex items-center gap-2' },
+                                            React.createElement('span', { className: 'w-2 h-2 bg-indigo-600 rounded-full' }),
+                                            state
+                                        ),
+                                        React.createElement('div', { className: 'space-y-2' },
+                                            items.map((item, idx) =>
+                                                React.createElement('div', {
+                                                    key: idx,
+                                                    className: 'flex items-start gap-3 text-sm'
+                                                },
+                                                    React.createElement('span', {
+                                                        className: `px-3 py-1 rounded-full text-xs font-semibold ${
+                                                            item.type === 'Feiertag' 
+                                                                ? 'bg-red-100 text-red-700' 
+                                                                : 'bg-blue-100 text-blue-700'
+                                                        }`
+                                                    }, item.type),
+                                                    React.createElement('div', { className: 'flex-1' },
+                                                        React.createElement('div', { className: 'font-medium text-gray-800' }, item.name),
+                                                        React.createElement('div', { className: 'text-gray-500 text-xs mt-1' },
+                                                            item.date ? new Date(item.date).toLocaleDateString('de-DE', {
+                                                                weekday: 'short',
+                                                                day: '2-digit',
+                                                                month: '2-digit',
+                                                                year: 'numeric'
+                                                            }) : null,
+                                                            item.start && item.end ? `${new Date(item.start).toLocaleDateString('de-DE', {
+                                                                day: '2-digit',
+                                                                month: '2-digit',
+                                                                year: 'numeric'
+                                                            })} - ${new Date(item.end).toLocaleDateString('de-DE', {
+                                                                day: '2-digit',
+                                                                month: '2-digit',
+                                                                year: 'numeric'
+                                                            })}` : null
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Info Box
+                    React.createElement('div', { className: 'mt-6 p-4 bg-green-50 rounded-lg border border-green-200' },
+                        React.createElement('p', { className: 'text-sm text-green-800' },
+                            React.createElement('strong', null, 'Live-Daten: '),
+                            'Diese App verwendet aktuelle Daten von ferien-api.de (Schulferien) und feiertage-api.de (gesetzliche Feiertage). Vielen Dank an die Entwickler für diese kostenlosen APIs!'
+                        )
+                    )
+                )
+            )
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+</script>
+```
+
+</body>
+</html>
