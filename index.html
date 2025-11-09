@@ -79,7 +79,7 @@
                         years.push(year);
                     }
 
-                    // Schulferien abrufen
+                    // Schulferien abrufen für jedes Bundesland
                     for (const [stateName, stateCode] of Object.entries(stateMapping)) {
                         for (const year of years) {
                             try {
@@ -112,40 +112,34 @@
                         }
                     }
 
-                    // Feiertage abrufen
-                    for (const year of years) {
-                        try {
-                            const response = await fetch(
-                                `https://feiertage-api.de/api/?jahr=${year}`
-                            );
-                            
-                            if (response.ok) {
-                                const data = await response.json();
+                    // Feiertage abrufen - für jedes Bundesland separat
+                    for (const [stateName, stateCode] of Object.entries(stateMapping)) {
+                        for (const year of years) {
+                            try {
+                                const response = await fetch(
+                                    `https://feiertage-api.de/api/?jahr=${year}&nur_land=${stateCode}`
+                                );
                                 
-                                Object.entries(data).forEach(([name, info]) => {
-                                    const feiertagDate = new Date(info.datum);
+                                if (response.ok) {
+                                    const data = await response.json();
                                     
-                                    if (feiertagDate >= start && feiertagDate <= end) {
-                                        Object.entries(stateMapping).forEach(([stateName, stateCode]) => {
-                                            const hinweis = info.hinweis || '';
-                                            const isNational = hinweis === '';
-                                            const isInState = hinweis.includes(stateCode) || isNational;
-                                            
-                                            if (isInState) {
-                                                affected.add(stateName);
-                                                details.push({
-                                                    state: stateName,
-                                                    type: 'Feiertag',
-                                                    name: name,
-                                                    date: info.datum
-                                                });
-                                            }
-                                        });
-                                    }
-                                });
+                                    Object.entries(data).forEach(([name, info]) => {
+                                        const feiertagDate = new Date(info.datum);
+                                        
+                                        if (feiertagDate >= start && feiertagDate <= end) {
+                                            affected.add(stateName);
+                                            details.push({
+                                                state: stateName,
+                                                type: 'Feiertag',
+                                                name: name,
+                                                date: info.datum
+                                            });
+                                        }
+                                    });
+                                }
+                            } catch (err) {
+                                console.error(`Fehler beim Abrufen der Feiertage für ${stateName}:`, err);
                             }
-                        } catch (err) {
-                            console.error(`Fehler beim Abrufen der Feiertage für ${year}:`, err);
                         }
                     }
 
